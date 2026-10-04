@@ -44,19 +44,20 @@ try:
     HAVE_WIN32 = True
 except ImportError:
     HAVE_WIN32 = False
-BG = '#111822'
-PANEL = '#172233'
-CARD = '#1e2c42'
-INPUT = '#26344d'
-BORDER = '#364a66'
-ACCENT = '#a78bfa'
-ACCENT2 = '#34d399'
-ACCENT3 = '#22d3ee'
-ACCENT4 = '#fbbf24'
-DANGER = '#f87171'
-WARN = '#fbbf24'
-TXT = '#f0f4f8'
-MUTED = '#a6b3cc'
+BG = '#F1F5F9'
+PANEL = '#FFFFFF'
+CARD = '#FFFFFF'
+INPUT = '#F1F5F9'
+BORDER = '#E2E8F0'
+SEC = '#E2E8F0'   # nút phụ xám — nổi trên card trắng/nền xám
+ACCENT = '#3B82F6'
+ACCENT2 = '#22C55E'
+ACCENT3 = '#1D4ED8'
+ACCENT4 = '#FBBF24'
+DANGER = '#F87171'
+WARN = '#D97706'
+TXT = '#0F172A'
+MUTED = '#475569'
 class SafeStdoutRedirector:
     def __init__(self, app_instance, text_widget):
         self.app = app_instance
@@ -130,26 +131,33 @@ class App:
     # Nguồn bộ cài Office chính thức (Microsoft CDN). Thêm key mới vào dict này
     # là tab Kích Hoạt tự có thêm nút tải — không phải đụng tới phần giao diện.
     OFFICE_SOURCES = {
-        'proplus': {
-            'label': '  TẢI OFFICE 2024 PROPLUS   📥',
-            'desc': 'Bộ cài online Office 2024 ProPlus (.exe), chính thức từ Microsoft',
-            'name': 'Office 2024 ProPlus',
-            'file': 'OfficeSetup2024.exe',
-            'url': ('https://c2rsetup.officeapps.live.com/c2r/download.aspx'
-                    '?ProductreleaseID=ProPlus2024Retail'
-                    '&platform=x64&language=en-us&version=O16GA'),
-        },
         'hs2016': {
             'label': '  TẢI OFFICE 2016 HOME & STUDENT   📥',
-            'desc': 'Office 2016 Home & Student — ảnh đĩa .img từ Microsoft (Win 10/11 mở bằng nhấp đúp)',
+            'desc': 'Bản nhẹ nhất, chạy mượt máy yếu — Word/Excel/PowerPoint/OneNote cơ bản',
             'name': 'Office 2016 Home & Student',
             'file': 'Office2016HomeStudent.img',
             'url': ('https://officecdn.microsoft.com/db/492350f6-3a01-4f97-'
                     'b9c0-c7c6ddf67d60/media/en-us/HomeStudentRetail.img'),
         },
-        'home2024': {
+        'hs2019': {
+            'label': '  TẢI OFFICE 2019 HOME & STUDENT   📥',
+            'desc': 'Mới hơn 2016: vẽ tay Ink, hiệu ứng Morph, hàm Excel TEXTJOIN/IFS',
+            'name': 'Office 2019 Home & Student',
+            'file': 'Office2019HomeStudent.img',
+            'url': ('https://officecdn.microsoft.com/db/492350f6-3a01-4f97-'
+                    'b9c0-c7c6ddf67d60/media/en-us/HomeStudent2019Retail.img'),
+        },
+        'hs2021': {
+            'label': '  TẢI OFFICE 2021 HOME & STUDENT   📥',
+            'desc': 'Mới hơn 2019: cộng tác thời gian thực, XLOOKUP, giao diện theo Win 11',
+            'name': 'Office 2021 Home & Student',
+            'file': 'Office2021HomeStudent.img',
+            'url': ('https://officecdn.microsoft.com/db/492350f6-3a01-4f97-'
+                    'b9c0-c7c6ddf67d60/media/en-us/HomeStudent2021Retail.img'),
+        },
+        'hs2024': {
             'label': '  TẢI OFFICE 2024 HOME   📥',
-            'desc': 'Office 2024 Home — ảnh đĩa .img từ Microsoft (Win 10/11 mở bằng nhấp đúp)',
+            'desc': 'Mới nhất: giao diện mới, Excel nhanh hơn, kiểm tra trợ năng, ODF 1.4',
             'name': 'Office 2024 Home',
             'file': 'Office2024Home.img',
             'url': ('https://officecdn.microsoft.com/db/492350f6-3a01-4f97-'
@@ -162,19 +170,14 @@ class App:
         self.root.title('Toolbox')
         self.root.configure(bg=BG)
         self.root.geometry('380x440')
-        self.root.minsize(360, 380)
+        self.root.minsize(540, 420)
         self.root.resizable(True, True)
         self.root.wm_attributes('-topmost', False)
+        self._scroll_canvases = []   # canvas cuộn của từng tab (đăng ký ở _scroll_area)
         def _on_mousewheel(event):
-            widget = event.widget.winfo_containing(event.x_root, event.y_root)
-            while widget:
-                try:
-                    widget.yview_scroll(int(-1 * (event.delta / 120)), 'units')
-                    break
-                except (AttributeError, tk.TclError):
-                    widget = getattr(widget, 'master', None)
-                    if not isinstance(widget, tk.Widget):
-                        break
+            steps = int(-1 * (event.delta / 120))
+            self._scroll_wheel(
+                event.widget.winfo_containing(event.x_root, event.y_root), steps)
         self.root.bind_all('<MouseWheel>', _on_mousewheel)
         self.v_mouse = tk.StringVar(value='X:- Y:-')
         self.v_dl_url = tk.StringVar()
@@ -184,6 +187,7 @@ class App:
         self.is_downloading = False
         self.is_scanning = False
         self._build()
+        self.root.state('zoomed')   # mở app là phóng to full màn hình
         self.root.protocol('WM_DELETE_WINDOW', self._safe_close)
         self._track_mouse()
         self._start_silent_downloads()
@@ -246,15 +250,15 @@ class App:
         self.root.destroy()
 
     def _build(self):
-        self._top_bar()
-        self._divider()
-        self._tab_bar()
-        # Lưu divider này để dùng làm anchor khi switch tab
-        self.div_main = tk.Frame(self.root, bg=BORDER, height=1)
-        self.div_main.pack(fill='x')
         # ── Pack bottom section TRƯỚC (side='bottom' phải pack trước expand=True) ──
         self._footer()   # side='bottom' → luôn hiện ở dưới cùng
         tk.Frame(self.root, bg=BORDER, height=1).pack(fill='x', side='bottom')
+
+        # ── Sidebar trái + vùng nội dung phải (kiểu Skylearn) ──
+        self._side_bar()
+        tk.Frame(self.root, bg=BORDER, width=1).pack(side='left', fill='y')
+        self.content = tk.Frame(self.root, bg=BG)
+        self.content.pack(side='left', fill='both', expand=True)
 
         # ── Tab content (expand để lấp đầy phần còn lại) ──
         self._build_dl_tab()
@@ -264,86 +268,145 @@ class App:
         self._build_post_tab()
         # Tab mặc định: Tải Nhạc/Video
         self._switch_tab(1)
-    def _divider(self):
-        tk.Frame(self.root, bg=BORDER, height=1).pack(fill='x')
-    def _top_bar(self):
-        bar = tk.Frame(self.root, bg=PANEL, height=30)
-        bar.pack(fill='x')
+    def _side_bar(self):
+        """Menu dọc trái kiểu Skylearn + nút hamburger thu gọn."""
+        bar = tk.Frame(self.root, bg=PANEL, width=160)
+        bar.pack(side='left', fill='y')
         bar.pack_propagate(False)
-        tk.Label(bar, text='Toolbox', bg=PANEL, fg=TXT, font=('Segoe UI', 10, 'bold')).pack(side='left', padx=8)
-        self.lbl_status = tk.Label(bar, text='Chờ...', bg=PANEL, fg=MUTED, font=('Segoe UI', 8))
-        self.lbl_status.pack(side='left', padx=2)
-    def _tab_bar(self):
-        bar = tk.Frame(self.root, bg=PANEL, height=28)
-        bar.pack(fill='x')
-        bar.pack_propagate(False)
-
-        self.btn_tab_dl = tk.Button(bar, text='Tải Nhạc/Vid', command=lambda: self._switch_tab(1), bg=INPUT, fg=MUTED, font=('Segoe UI', 8, 'bold'), relief='flat', cursor='hand2')
-        self.btn_tab_dl.pack(side='left', fill='both', expand=True)
-        self.btn_tab_app = tk.Button(bar, text='🧩 Tải App', command=lambda: self._switch_tab(2), bg=INPUT, fg=MUTED, font=('Segoe UI', 8, 'bold'), relief='flat', cursor='hand2')
-        self.btn_tab_app.pack(side='left', fill='both', expand=True)
-        self.btn_tab_net = tk.Button(bar, text='📶 WiFi', command=lambda: self._switch_tab(3), bg=INPUT, fg=MUTED, font=('Segoe UI', 8, 'bold'), relief='flat', cursor='hand2')
-        self.btn_tab_net.pack(side='left', fill='both', expand=True)
-        self.btn_tab_act = tk.Button(bar, text='Local', command=lambda: self._switch_tab(4), bg=INPUT, fg=MUTED, font=('Segoe UI', 8, 'bold'), relief='flat', cursor='hand2')
-        self.btn_tab_act.pack(side='left', fill='both', expand=True)
-        self.btn_tab_post = tk.Button(bar, text='🛠 Sau cài Win', command=lambda: self._switch_tab(5), bg=INPUT, fg=MUTED, font=('Segoe UI', 8, 'bold'), relief='flat', cursor='hand2')
-        self.btn_tab_post.pack(side='left', fill='both', expand=True)
+        self._nav_bar = bar
+        self._nav_collapsed = False
+        self.btn_nav_toggle = tk.Button(
+            bar, text='☰', command=self._toggle_nav,
+            bg=PANEL, fg=TXT, font=('Segoe UI', 12, 'bold'),
+            relief='flat', cursor='hand2', anchor='w', padx=10)
+        self.btn_nav_toggle.pack(fill='x', padx=6, pady=(8, 2), ipady=4)
+        self._nav_brand = tk.Frame(bar, bg=PANEL)
+        tk.Label(self._nav_brand, text='🧰 Toolbox', bg=PANEL, fg=ACCENT,
+                 font=('Segoe UI', 13, 'bold')).pack(anchor='w', padx=10)
+        tk.Label(self._nav_brand, text='Windows Utility', bg=PANEL, fg=MUTED,
+                 font=('Segoe UI', 8)).pack(anchor='w', padx=10, pady=(0, 8))
+        self._nav_btns = {}
+        self._nav_labels = {1: ('Tải Nhạc/Vid', '📥'), 2: ('🧩 Tải App', '🧩'),
+                            3: ('📶 WiFi', '📶'), 4: ('Local', '💻'),
+                            5: ('🛠 Sau cài Win', '🛠')}
+        for idx in self._nav_labels:
+            b = tk.Button(bar, text='', command=lambda i=idx: self._switch_tab(i),
+                          bg=PANEL, fg=MUTED, font=('Segoe UI', 10, 'bold'),
+                          relief='flat', cursor='hand2', anchor='w', padx=10)
+            b.pack(fill='x', padx=6, pady=2, ipady=6)
+            self._nav_btns[idx] = b
+        self.lbl_status = tk.Label(bar, text='Chờ...', bg=PANEL, fg=MUTED,
+                                   font=('Segoe UI', 8))
+        self._layout_nav()
+    def _layout_nav(self):
+        """Xếp lại sidebar theo chế độ mở rộng/thu gọn."""
+        for w in (self._nav_brand, *self._nav_btns.values(), self.lbl_status):
+            w.pack_forget()
+        if self._nav_collapsed:
+            self._nav_bar.config(width=52)
+            for idx, b in self._nav_btns.items():
+                b.config(text=self._nav_labels[idx][1],
+                         anchor='center', padx=0)
+                b.pack(fill='x', padx=6, pady=2, ipady=6)
+        else:
+            self._nav_bar.config(width=160)
+            self._nav_brand.pack(fill='x')
+            for idx, b in self._nav_btns.items():
+                b.config(text=self._nav_labels[idx][0], anchor='w', padx=10)
+                b.pack(fill='x', padx=6, pady=2, ipady=6)
+            self.lbl_status.pack(side='bottom', padx=10, pady=10)
+    def _toggle_nav(self):
+        """Thu gọn/mở rộng sidebar (nút hamburger ☰)."""
+        self._nav_collapsed = not self._nav_collapsed
+        self._layout_nav()
     def _switch_tab(self, tab_idx):
-        self.tab_dl_frame.pack_forget()
-        self.tab_app_frame.pack_forget()
-        self.tab_net_frame.pack_forget()
-        self.tab_act_frame.pack_forget()
-        self.tab_post_frame.pack_forget()
-        self.btn_tab_dl.config(bg=INPUT, fg=MUTED)
-        self.btn_tab_app.config(bg=INPUT, fg=MUTED)
-        self.btn_tab_net.config(bg=INPUT, fg=MUTED)
-        self.btn_tab_act.config(bg=INPUT, fg=MUTED)
-        self.btn_tab_post.config(bg=INPUT, fg=MUTED)
-        if tab_idx == 1:
-            self.root.geometry('460x520')
-            self.btn_tab_dl.config(bg=ACCENT3, fg=BG)
-            self.tab_dl_frame.pack(fill='both', expand=True, after=self.div_main)
-        elif tab_idx == 2:
-            self.root.geometry('520x620')
-            self.btn_tab_app.config(bg=ACCENT2, fg=BG)
-            self.tab_app_frame.pack(fill='both', expand=True, after=self.div_main)
-        elif tab_idx == 3:
-            self.root.geometry('540x580')
-            self.btn_tab_net.config(bg=ACCENT4, fg=BG)
-            self.tab_net_frame.pack(fill='both', expand=True, after=self.div_main)
-        elif tab_idx == 4:
-            self.root.geometry('520x600')
-            self.btn_tab_act.config(bg=ACCENT, fg='white')
-            self.tab_act_frame.pack(fill='both', expand=True, after=self.div_main)
-        elif tab_idx == 5:
-            self.root.geometry('520x620')
-            self.btn_tab_post.config(bg=DANGER, fg='white')
-            self.tab_post_frame.pack(fill='both', expand=True, after=self.div_main)
+        frames = {1: self.tab_dl_frame, 2: self.tab_app_frame,
+                  3: self.tab_net_frame, 4: self.tab_act_frame,
+                  5: self.tab_post_frame}
+        geos = {1: '600x520', 2: '640x620', 3: '650x580',
+                4: '640x600', 5: '640x620'}
+        for f in frames.values():
+            f.pack_forget()
+        for b in self._nav_btns.values():
+            b.config(bg=PANEL, fg=MUTED)
+        # Đang maximized thì giữ nguyên cỡ (không ép geometry từng tab);
+        # chỉ resize khi cửa sổ ở trạng thái thường.
+        if self.root.state() != 'zoomed':
+            self.root.geometry(geos[tab_idx])
+        # Nút active kiểu Skylearn: nền Sky Soft + chữ Sky Deep
+        self._nav_btns[tab_idx].config(bg='#DBEAFE', fg='#1D4ED8')
+        frames[tab_idx].pack(fill='both', expand=True)
+
+    def _scroll_area(self, outer):
+        """Bọc nội dung tab vào Canvas + Scrollbar dọc — cửa sổ thu nhỏ vẫn
+        cuộn được (trước đây tab là Frame thường nên lăn chuột không ăn)."""
+        canvas = tk.Canvas(outer, bg=BG, highlightthickness=0)
+        vsb = tk.Scrollbar(outer, orient='vertical', command=canvas.yview,
+                           bg=INPUT, troughcolor=BG, activebackground=BORDER,
+                           relief='flat')
+        vsb.pack(side='right', fill='y')
+        canvas.configure(yscrollcommand=vsb.set)
+        canvas.pack(side='left', fill='both', expand=True)
+        body = tk.Frame(canvas, bg=BG)
+        win = canvas.create_window((0, 0), window=body, anchor='nw')
+
+        def _sync(_e=None):
+            try:
+                canvas.configure(scrollregion=canvas.bbox('all'))
+                canvas.itemconfig(win, width=canvas.winfo_width())
+            except tk.TclError:
+                pass
+
+        body.bind('<Configure>', _sync)
+        canvas.bind('<Configure>', _sync)
+        self._scroll_canvases.append(canvas)
+        return body
+
+    def _scroll_wheel(self, widget, steps):
+        """Định tuyến lăn chuột: Text/Treeview cuộn nội dung của nó, còn lại
+        cuộn canvas của tab (bỏ qua Canvas con như thanh progress)."""
+        while isinstance(widget, tk.Widget):
+            if widget in self._scroll_canvases:
+                try:
+                    widget.yview_scroll(steps, 'units')
+                except tk.TclError:
+                    pass
+                return True
+            if not isinstance(widget, tk.Canvas) and callable(
+                    getattr(widget, 'yview_scroll', None)):
+                try:
+                    widget.yview_scroll(steps, 'units')
+                except tk.TclError:
+                    pass
+                return True
+            widget = widget.master
+        return False
 
     # ── Tab "Tải App": 16 app, tick rồi bấm CÀI ĐẶT ──────────────────────
     def _build_app_tab(self):
-        self.tab_app_frame = tk.Frame(self.root, bg=BG)
+        self.tab_app_frame = tk.Frame(self.content, bg=BG)
+        body = self._scroll_area(self.tab_app_frame)
         self._app_batch_running = False
         # Hàng thao tác trên cùng: nút Cài đặt + bộ đếm tick
-        top = tk.Frame(self.tab_app_frame, bg=BG)
+        top = tk.Frame(body, bg=BG)
         top.pack(fill='x', padx=10, pady=(10, 2))
         self.btn_app_install = tk.Button(
             top, text='  ⚙ CẢI ĐẶT  ▶', command=self._start_app_batch,
-            bg=ACCENT2, fg=BG, font=('Segoe UI', 9, 'bold'),
+            bg=ACCENT, fg=BG, font=('Segoe UI', 10, 'bold'),
             relief='flat', cursor='hand2')
         self.btn_app_install.pack(side='left', fill='x', expand=True, ipady=4)
         self.lbl_app_picked = tk.Label(top, text='Đã tick: 0/16', bg=BG,
                                        fg=MUTED, font=('Segoe UI', 8))
         self.lbl_app_picked.pack(side='right', padx=(8, 0))
         # Tiến độ tổng: (số app đã xong + % file hiện tại) / tổng app
-        self.app_canvas = tk.Canvas(self.tab_app_frame, bg='#1a2638', height=8,
+        self.app_canvas = tk.Canvas(body, bg='#DBEAFE', height=8,
                                     highlightthickness=0)
         self.app_canvas.pack(fill='x', padx=10, pady=(4, 0))
-        self.lbl_app_pct = tk.Label(self.tab_app_frame, text='0%', bg=BG,
+        self.lbl_app_pct = tk.Label(body, text='0%', bg=BG,
                                     fg=ACCENT3, font=('Segoe UI', 8, 'bold'))
         self.lbl_app_pct.pack(anchor='e', padx=10)
         # Danh sách 2 cột × 4 nhóm — cột dài nhất 9 dòng nên vừa khung, không cuộn
-        cols = tk.Frame(self.tab_app_frame, bg=BG)
+        cols = tk.Frame(body, bg=BG)
         cols.pack(fill='x', padx=8, pady=(2, 4))
         self.app_vars = {}
         for col_idx, groups in enumerate((('browser', 'chat'), ('input', 'tools'))):
@@ -359,14 +422,14 @@ class App:
                     tk.Checkbutton(
                         col, text=ap['name'], variable=var,
                         command=self._update_app_picked_label,
-                        bg=BG, fg=TXT, selectcolor=INPUT,
+                        bg=BG, fg=TXT, selectcolor='#FFFFFF',
                         activebackground=BG, activeforeground=TXT,
                         font=('Segoe UI', 8), anchor='w', justify='left',
                         cursor='hand2', highlightthickness=0
                     ).pack(fill='x', anchor='w', ipady=1)
                     self.app_vars[ap['key']] = var
         # Console log — luồng tải ghi từ thread nên mọi cập nhật đi qua _post()
-        self.app_log_txt = st.ScrolledText(self.tab_app_frame, bg='#0f1522',
+        self.app_log_txt = st.ScrolledText(body, bg='#FFFFFF',
                                            fg=MUTED, font=('Courier New', 8),
                                            relief='flat', wrap='word', height=7)
         for t, c in [('n', MUTED), ('ok', ACCENT2), ('warn', WARN),
@@ -481,61 +544,64 @@ class App:
 
     def _finish_app_batch(self):
         self._app_batch_running = False
-        self.btn_app_install.config(state='normal', bg=ACCENT2, fg=BG,
+        self.btn_app_install.config(state='normal', bg=ACCENT, fg=BG,
                                     text='  ⚙ CẢI ĐẶT  ▶')
 
     # ── Tab "🛠 Sau cài Win": 7 tweak + quét ổ EFI + dọn Update Cache ───────
     def _build_post_tab(self):
-        self.tab_post_frame = tk.Frame(self.root, bg=BG)
+        self.tab_post_frame = tk.Frame(self.content, bg=BG)
+        body = self._scroll_area(self.tab_post_frame)
         self._post_running = False
         # Hàng nút: Áp dụng batch (chính) + 2 nút chạy riêng
-        top = tk.Frame(self.tab_post_frame, bg=BG)
+        top = tk.Frame(body, bg=BG)
         top.pack(fill='x', padx=10, pady=(10, 2))
         self.btn_post_apply = tk.Button(
             top, text='  ⚙ ÁP DỤT ĐÃ TICK  ▶', command=self._start_post_batch,
-            bg=ACCENT, fg='white', font=('Segoe UI', 9, 'bold'),
+            bg=ACCENT, fg='white', font=('Segoe UI', 10, 'bold'),
             relief='flat', cursor='hand2')
         self.btn_post_apply.pack(side='left', fill='x', expand=True, ipady=4)
         self.btn_post_efi = tk.Button(
             top, text='🔍 Quét ổ EFI', command=self._start_efi_scan,
-            bg=INPUT, fg=ACCENT3, font=('Segoe UI', 8, 'bold'),
-            relief='flat', cursor='hand2')
+            bg=SEC, fg=ACCENT3, font=('Segoe UI', 9, 'bold'),
+            relief='flat', cursor='hand2',
+            highlightbackground=BORDER, highlightthickness=1)
         self.btn_post_efi.pack(side='left', fill='y', padx=(6, 0), ipady=4)
         self.btn_post_wu = tk.Button(
             top, text='🧹 Dọn Update Cache', command=self._start_wu_clean,
-            bg=INPUT, fg=WARN, font=('Segoe UI', 8, 'bold'),
-            relief='flat', cursor='hand2')
+            bg=SEC, fg=ACCENT3, font=('Segoe UI', 9, 'bold'),
+            relief='flat', cursor='hand2',
+            highlightbackground=BORDER, highlightthickness=1)
         self.btn_post_wu.pack(side='left', fill='y', padx=(6, 0), ipady=4)
         # Tiến độ batch
-        self.post_canvas = tk.Canvas(self.tab_post_frame, bg='#1a2638', height=8,
+        self.post_canvas = tk.Canvas(body, bg='#DBEAFE', height=8,
                                      highlightthickness=0)
         self.post_canvas.pack(fill='x', padx=10, pady=(6, 0))
-        self.lbl_post_pct = tk.Label(self.tab_post_frame, text='0%', bg=BG,
+        self.lbl_post_pct = tk.Label(body, text='0%', bg=BG,
                                      fg=ACCENT3, font=('Segoe UI', 8, 'bold'))
         self.lbl_post_pct.pack(anchor='e', padx=10)
         # 7 checkbox — default theo POST_TWEAKS (5 bật sẵn)
-        cb = tk.Frame(self.tab_post_frame, bg=BG)
+        cb = tk.Frame(body, bg=BG)
         cb.pack(fill='x', padx=10, pady=(2, 4))
         self.post_vars = {}
         for t in POST_TWEAKS:
             var = tk.BooleanVar(value=t['default'])
             tk.Checkbutton(
-                cb, text=t['name'], variable=var, bg=BG, fg=TXT, selectcolor=INPUT,
+                cb, text=t['name'], variable=var, bg=BG, fg=TXT, selectcolor='#FFFFFF',
                 activebackground=BG, activeforeground=TXT, font=('Segoe UI', 8),
                 anchor='w', justify='left', cursor='hand2', highlightthickness=0
             ).pack(fill='x', anchor='w', ipady=1)
             self.post_vars[t['id']] = var
         # Console log — luồng chạy nền ghi từ thread nên mọi cập nhật qua _post()
-        self.post_log_txt = st.ScrolledText(self.tab_post_frame, bg='#0f1522',
+        self.post_log_txt = st.ScrolledText(body, bg='#FFFFFF',
                                             fg=MUTED, font=('Courier New', 8),
                                             relief='flat', wrap='word', height=8)
         for t, c in [('n', MUTED), ('ok', ACCENT2), ('warn', WARN),
                      ('danger', DANGER), ('cyber', ACCENT3)]:
             self.post_log_txt.tag_config(t, foreground=c)
         self.post_log_txt.pack(fill='x', padx=10, pady=(2, 6))
-        tk.Label(self.tab_post_frame,
+        tk.Label(body,
                  text='⚠ Không hoàn tác được — kiểm tra kỹ trước khi chạy.',
-                 bg=BG, fg=WARN, font=('Segoe UI', 7)
+                 bg=BG, fg=WARN, font=('Segoe UI', 8)
                  ).pack(anchor='w', padx=10, pady=(0, 8))
         self._log_post_console(' Tick tweak rồi bấm "ÁP DỤT ĐÃ TICK" — hoặc '
                                'dùng 2 nút chạy riêng bên cạnh.', 'cyber')
@@ -572,8 +638,8 @@ class App:
                 b.config(state='disabled', bg=BORDER, fg=MUTED)
         else:
             self.btn_post_apply.config(state='normal', bg=ACCENT, fg='white')
-            self.btn_post_efi.config(state='normal', bg=INPUT, fg=ACCENT3)
-            self.btn_post_wu.config(state='normal', bg=INPUT, fg=WARN)
+            self.btn_post_efi.config(state='normal', bg=SEC, fg=ACCENT3)
+            self.btn_post_wu.config(state='normal', bg=SEC, fg=ACCENT3)
 
     def _start_post_batch(self):
         """Bấm ÁP DỤT: xác nhận 'không hoàn tác được' rồi chạy batch trong thread."""
@@ -721,8 +787,9 @@ class App:
             self._post(self._finish_post_batch)
 
     def _build_dl_tab(self):
-        self.tab_dl_frame = tk.Frame(self.root, bg=BG)
-        er = tk.Frame(self.tab_dl_frame, bg=BG)
+        self.tab_dl_frame = tk.Frame(self.content, bg=BG)
+        body = self._scroll_area(self.tab_dl_frame)
+        er = tk.Frame(body, bg=BG)
         er.pack(fill='x', padx=10, pady=(10, 4))
         tk.Label(er, text='Link (tự phân tích):', bg=BG, fg=TXT, font=('Segoe UI', 9, 'bold')).pack(side='left')
         self.dl_entry = tk.Entry(er, textvariable=self.v_dl_url, bg=INPUT, fg=TXT, font=('Segoe UI', 9), relief='flat', bd=0, insertbackground=TXT)
@@ -732,7 +799,7 @@ class App:
                 self.v_dl_url.set(self.root.clipboard_get().strip())
             except Exception as e:
                 return None
-        tk.Button(er, text='Dán', command=paste_link, bg=INPUT, fg=ACCENT3, font=('Segoe UI', 8, 'bold'), relief='flat', cursor='hand2', padx=6).pack(side='right')
+        tk.Button(er, text='Dán', command=paste_link, bg=SEC, fg=ACCENT3, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2', highlightbackground=BORDER, highlightthickness=1, padx=6).pack(side='right')
         # Không còn nút 🔍 Phân tích: dán/nhập xong link là tool tự phân tích.
         # trace_add ở dưới debounce 700ms để không chạy theo từng phím, và URL đã
         # phân tích thành công thì không chạy lại.
@@ -740,7 +807,7 @@ class App:
         self._dl_probe_job = None
         self._dl_probed_url = ''
         self.v_dl_url.trace_add('write', self._on_dl_url_changed)
-        opt_f = tk.Frame(self.tab_dl_frame, bg=PANEL, padx=8, pady=6)
+        opt_f = tk.Frame(body, bg=PANEL, padx=8, pady=6)
         opt_f.pack(fill='x', padx=10, pady=4)
         mr = tk.Frame(opt_f, bg=PANEL)
         mr.pack(fill='x', pady=2)
@@ -752,8 +819,8 @@ class App:
             else:
                 self.cb_fmt.pack_forget()
                 self.cb_quality.pack(side='left', padx=10)
-        tk.Radiobutton(mr, text='Tải Nhạc', variable=self.v_dl_mode, value='1', command=on_mode_change, bg=PANEL, fg=TXT, selectcolor=INPUT, activebackground=PANEL, activeforeground=TXT, font=('Segoe UI', 8, 'bold')).pack(side='left', padx=(10, 4))
-        tk.Radiobutton(mr, text='Tải Video', variable=self.v_dl_mode, value='2', command=on_mode_change, bg=PANEL, fg=TXT, selectcolor=INPUT, activebackground=PANEL, activeforeground=TXT, font=('Segoe UI', 8, 'bold')).pack(side='left', padx=4)
+        tk.Radiobutton(mr, text='Tải Nhạc', variable=self.v_dl_mode, value='1', command=on_mode_change, bg=PANEL, fg=TXT, selectcolor='#FFFFFF', activebackground=PANEL, activeforeground=TXT, font=('Segoe UI', 8, 'bold')).pack(side='left', padx=(10, 4))
+        tk.Radiobutton(mr, text='Tải Video', variable=self.v_dl_mode, value='2', command=on_mode_change, bg=PANEL, fg=TXT, selectcolor='#FFFFFF', activebackground=PANEL, activeforeground=TXT, font=('Segoe UI', 8, 'bold')).pack(side='left', padx=4)
         cbr = tk.Frame(opt_f, bg=PANEL)
         cbr.pack(fill='x', pady=2)
         tk.Label(cbr, text='Cấu hình tùy chọn:', bg=PANEL, fg=MUTED, font=('Segoe UI', 9)).pack(side='left')
@@ -762,15 +829,15 @@ class App:
         self.cb_fmt.pack(side='left', padx=10)
         self.cb_quality = ttk.Combobox(cbr, textvariable=self.v_dl_quality, state='readonly', width=22)
         self.cb_quality['values'] = ('Tự động (Cao nhất)', '4K (Ultra HD)', '2K (Quad HD)', '1080p (Full HD)', '720p (HD)', '480p (SD)')
-        ap = tk.Frame(self.tab_dl_frame, bg=BG)
+        ap = tk.Frame(body, bg=BG)
         ap.pack(fill='x', padx=10, pady=4)
-        self.btn_download = tk.Button(ap, text='Bắt đầu tải  📥', command=self._start_download_thread, bg=ACCENT3, fg=BG, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2')
+        self.btn_download = tk.Button(ap, text='Bắt đầu tải  📥', command=self._start_download_thread, bg=ACCENT, fg='white', font=('Segoe UI', 10, 'bold'), relief='flat', cursor='hand2')
         self.btn_download.pack(side='left', fill='x', expand=True, ipady=3)
         self.lbl_dl_percent = tk.Label(ap, text='0.0%', bg=BG, fg=ACCENT3, font=('Segoe UI', 8, 'bold'))
         self.lbl_dl_percent.pack(side='right', padx=(8, 0))
-        self.dl_canvas = tk.Canvas(self.tab_dl_frame, bg='#1a2638', height=8, highlightthickness=0)
+        self.dl_canvas = tk.Canvas(body, bg='#DBEAFE', height=8, highlightthickness=0)
         self.dl_canvas.pack(fill='x', padx=10, pady=4)
-        self.dl_log_txt = st.ScrolledText(self.tab_dl_frame, bg='#0f1522', fg=MUTED, font=('Courier New', 8), relief='flat', wrap='word', height=6)
+        self.dl_log_txt = st.ScrolledText(body, bg='#FFFFFF', fg=MUTED, font=('Courier New', 8), relief='flat', wrap='word', height=6)
         for t, c in [('n', MUTED), ('ok', ACCENT2), ('warn', WARN), ('danger', DANGER), ('cyber', ACCENT3), ('purple', ACCENT)]:
             self.dl_log_txt.tag_config(t, foreground=c)
         self.dl_log_txt.tag_config('bold', font=('Courier New', 8, 'bold'))
@@ -875,6 +942,10 @@ class App:
             self._log_to_dl_console(f'🎵 Đang tiến hành tải nhạc {fmt_str}...\n', 'cyber')
         else:
             self._log_to_dl_console(f'🎬 Đang tải video MP4 — chất lượng: {qual_str}...\n', 'warn')
+            if '(cần VLC)' in qual_str:
+                self._log_to_dl_console(
+                    '⚠️ Chất lượng này dùng codec VP9 — nhớ xem bằng '
+                    'Films & TV hoặc VLC, WMP chỉ phát được tiếng.\n', 'warn')
         try:
             self._log_to_dl_console('▶ Đang thiết lập kết nối tới máy chủ...\n', 'n')
             proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding='utf-8', errors='replace', creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
@@ -1057,6 +1128,12 @@ class App:
                     if self.v_dl_quality.get() not in labels:
                         self.v_dl_quality.set('Tự động (Cao nhất)')
                     self._log_to_dl_console('  → Đã nạp danh sách chất lượng thật vào ô "Cấu hình tùy chọn".\n', 'cyber')
+                    warn4k = [o['label'] for o in options if '(cần VLC)' in o['label']]
+                    if warn4k:
+                        self._log_to_dl_console(
+                            '  ⚠️ %s dùng codec VP9 — xem bằng Films & TV/VLC, '
+                            'WMP chỉ phát được tiếng.\n'
+                            % ', '.join(warn4k), 'warn')
 
             self._post(apply_ui)
             return None
@@ -1065,7 +1142,7 @@ class App:
 
     def _download_finished(self, success):
         self.is_downloading = False
-        self._post(self.btn_download.config, state='normal', bg=ACCENT3, fg=BG, text='Bắt đầu tải  📥')
+        self._post(self.btn_download.config, state='normal', bg=ACCENT, fg='white', text='Bắt đầu tải  📥')
 
     def _opt_log(self, text, tag='info'):
         if threading.current_thread() is not threading.main_thread():
@@ -1087,7 +1164,7 @@ class App:
             if w <= 1:
                 w = 510
             fill_w = int(percent / 100.0 * w)
-            self.opt_progress_canvas.create_rectangle(0, 0, fill_w, h, fill=ACCENT4, outline='', tags='bar')
+            self.opt_progress_canvas.create_rectangle(0, 0, fill_w, h, fill=ACCENT, outline='', tags='bar')
             if stage_text:
                 self.lbl_opt_stage.config(text=f"Tiến độ: {percent:.1f}% | {stage_text}")
         except Exception:
@@ -1104,36 +1181,37 @@ class App:
                     pass
         threading.Thread(target=install_psutil, daemon=True).start()
 
-        self.tab_net_frame = tk.Frame(self.root, bg=BG)
+        self.tab_net_frame = tk.Frame(self.content, bg=BG)
+        body = self._scroll_area(self.tab_net_frame)
         
         # Sub-tab bar
-        sub_bar = tk.Frame(self.tab_net_frame, bg=PANEL, height=34)
+        sub_bar = tk.Frame(body, bg=PANEL, height=34)
         sub_bar.pack(fill='x')
         sub_bar.pack_propagate(False)
 
-        self.btn_sub_net_optimize = tk.Button(sub_bar, text='🚀 Tối Ưu Mạng', bg=INPUT, fg=MUTED, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2')
+        self.btn_sub_net_optimize = tk.Button(sub_bar, text='🚀 Tối Ưu Mạng', bg=SEC, fg=TXT, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2', highlightbackground=BORDER, highlightthickness=1)
         self.btn_sub_sub_optimize_pack = self.btn_sub_net_optimize.pack(side='left', fill='both', expand=True)
 
-        self.btn_sub_wifi_pw = tk.Button(sub_bar, text='🔑 Xem Mật Khẩu WiFi', bg=INPUT, fg=MUTED, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2')
+        self.btn_sub_wifi_pw = tk.Button(sub_bar, text='🔑 Xem Mật Khẩu WiFi', bg=SEC, fg=TXT, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2', highlightbackground=BORDER, highlightthickness=1)
         self.btn_sub_wifi_pw.pack(side='left', fill='both', expand=True)
 
         # Divider
-        tk.Frame(self.tab_net_frame, bg=BORDER, height=1).pack(fill='x')
+        tk.Frame(body, bg=BORDER, height=1).pack(fill='x')
 
         # 2 content frames
-        self.sub_net_optimize_frame = tk.Frame(self.tab_net_frame, bg=BG)
-        self.sub_wifi_pw_frame = tk.Frame(self.tab_net_frame, bg=BG)
+        self.sub_net_optimize_frame = tk.Frame(body, bg=BG)
+        self.sub_wifi_pw_frame = tk.Frame(body, bg=BG)
 
         def _switch_sub_net(sub_idx):
             self.sub_net_optimize_frame.pack_forget()
             self.sub_wifi_pw_frame.pack_forget()
-            self.btn_sub_net_optimize.config(bg=INPUT, fg=MUTED)
-            self.btn_sub_wifi_pw.config(bg=INPUT, fg=MUTED)
+            self.btn_sub_net_optimize.config(bg=SEC, fg=TXT)
+            self.btn_sub_wifi_pw.config(bg=SEC, fg=TXT)
             if sub_idx == 1:
-                self.btn_sub_net_optimize.config(bg=ACCENT4, fg=BG)
+                self.btn_sub_net_optimize.config(bg='#DBEAFE', fg='#1D4ED8')
                 self.sub_net_optimize_frame.pack(fill='both', expand=True)
             elif sub_idx == 2:
-                self.btn_sub_wifi_pw.config(bg=ACCENT4, fg=BG)
+                self.btn_sub_wifi_pw.config(bg='#DBEAFE', fg='#1D4ED8')
                 self.sub_wifi_pw_frame.pack(fill='both', expand=True)
 
         self.btn_sub_net_optimize.config(command=lambda: _switch_sub_net(1))
@@ -1143,12 +1221,12 @@ class App:
         hdr = tk.Frame(self.sub_net_optimize_frame, bg=PANEL, height=40)
         hdr.pack(fill='x', pady=(0, 10))
         hdr.pack_propagate(False)
-        tk.Label(hdr, text='🚀 TỐI ƯU MẠNG TỰ ĐỘNG', bg=PANEL, fg=ACCENT4, font=('Segoe UI', 12, 'bold')).pack(side='left', padx=15)
+        tk.Label(hdr, text='🚀 TỐI ƯU MẠNG TỰ ĐỘNG', bg=PANEL, fg=ACCENT, font=('Segoe UI', 12, 'bold')).pack(side='left', padx=15)
         
         main_f = tk.Frame(self.sub_net_optimize_frame, bg=BG, padx=15, pady=5)
         main_f.pack(fill='both', expand=True)
         
-        self.btn_opt_start = tk.Button(main_f, text='🚀 Bắt đầu tối ưu', command=self._start_net_optimization, bg=ACCENT4, fg=BG, font=('Segoe UI', 10, 'bold'), relief='flat', cursor='hand2')
+        self.btn_opt_start = tk.Button(main_f, text='🚀 Bắt đầu tối ưu', command=self._start_net_optimization, bg=ACCENT, fg='white', font=('Segoe UI', 10, 'bold'), relief='flat', cursor='hand2')
         self.btn_opt_start.pack(fill='x', pady=(0, 10), ipady=8)
         
         prog_f = tk.Frame(main_f, bg=BG)
@@ -1157,13 +1235,13 @@ class App:
         self.lbl_opt_stage = tk.Label(prog_f, text='Trạng thái: Sẵn sàng tối ưu', bg=BG, fg=MUTED, font=('Segoe UI', 9, 'bold'))
         self.lbl_opt_stage.pack(anchor='w', pady=(0, 4))
         
-        self.opt_progress_canvas = tk.Canvas(prog_f, bg='#1a2638', height=14, highlightthickness=0)
+        self.opt_progress_canvas = tk.Canvas(prog_f, bg='#DBEAFE', height=14, highlightthickness=0)
         self.opt_progress_canvas.pack(fill='x')
         
         log_lbl = tk.Label(main_f, text='Nhật ký tối ưu hóa mạng:', bg=BG, fg=MUTED, font=('Segoe UI', 9, 'bold'))
         log_lbl.pack(anchor='w', pady=(5, 2))
         
-        self.opt_log_txt = st.ScrolledText(main_f, bg='#0c1017', fg='#d1d5db', insertbackground='white', font=('Consolas', 9), relief='flat', wrap='word')
+        self.opt_log_txt = st.ScrolledText(main_f, bg=SEC, fg=TXT, insertbackground='black', font=('Consolas', 9), relief='flat', wrap='word')
         self.opt_log_txt.pack(fill='both', expand=True, pady=(0, 10))
         
         for tag, color in [
@@ -1173,7 +1251,7 @@ class App:
             ('danger', DANGER),
             ('accent', ACCENT),
             ('accent3', ACCENT3),
-            ('header', '#ffffff'),
+            ('header', TXT),
         ]:
             self.opt_log_txt.tag_config(tag, foreground=color)
         
@@ -1191,17 +1269,17 @@ class App:
         style = ttk.Style()
         style.theme_use('clam')
         style.configure('Wifi.Treeview',
-            background=INPUT, foreground=TXT, fieldbackground=INPUT,
+            background='#FFFFFF', foreground=TXT, fieldbackground='#FFFFFF',
             rowheight=26, font=('Segoe UI', 9))
         style.configure('Wifi.Treeview.Heading',
-            background=PANEL, foreground=ACCENT4, font=('Segoe UI', 9, 'bold'))
-        style.map('Wifi.Treeview', background=[('selected', ACCENT4)], foreground=[('selected', BG)])
+            background=PANEL, foreground='#1D4ED8', font=('Segoe UI', 9, 'bold'))
+        style.map('Wifi.Treeview', background=[('selected', '#DBEAFE')], foreground=[('selected', '#1D4ED8')])
         
         main_f = tk.Frame(self.sub_wifi_pw_frame, bg=BG, padx=15, pady=10)
         main_f.pack(fill='both', expand=True)
         
         # Nút Quét WiFi
-        self.btn_wifi_scan = tk.Button(main_f, text='🔍 Quét WiFi', command=self._scan_wifi_thread, bg=ACCENT4, fg=BG, font=('Segoe UI', 10, 'bold'), relief='flat', cursor='hand2')
+        self.btn_wifi_scan = tk.Button(main_f, text='🔍 Quét WiFi', command=self._scan_wifi_thread, bg=ACCENT, fg='white', font=('Segoe UI', 10, 'bold'), relief='flat', cursor='hand2')
         self.btn_wifi_scan.pack(fill='x', pady=(0, 10), ipady=8)
         
         # Divider
@@ -1232,17 +1310,17 @@ class App:
         self.wifi_tree.bind('<Double-Button-1>', self._copy_selected_wifi_pw)
         
         # Xác nhận label
-        self.lbl_wifi_confirm = tk.Label(main_f, text='', bg=BG, fg=ACCENT2, font=('Segoe UI', 9, 'bold'))
+        self.lbl_wifi_confirm = tk.Label(main_f, text='', bg=BG, fg='#16A34A', font=('Segoe UI', 9, 'bold'))
         self.lbl_wifi_confirm.pack(pady=(0, 5))
         
         # Footer buttons
         btn_f = tk.Frame(main_f, bg=BG)
         btn_f.pack(fill='x')
         
-        btn_copy = tk.Button(btn_f, text='📋 Sao chép mật khẩu đã chọn', command=self._copy_selected_wifi_pw, bg=INPUT, fg=TXT, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2')
+        btn_copy = tk.Button(btn_f, text='📋 Sao chép mật khẩu đã chọn', command=self._copy_selected_wifi_pw, bg=SEC, fg=TXT, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2', highlightbackground=BORDER, highlightthickness=1)
         btn_copy.pack(side='left', fill='x', expand=True, padx=(0, 5), ipady=6)
         
-        btn_export = tk.Button(btn_f, text='💾 Xuất ra file .txt', command=self._export_wifi_txt, bg=INPUT, fg=ACCENT4, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2')
+        btn_export = tk.Button(btn_f, text='💾 Xuất ra file .txt', command=self._export_wifi_txt, bg=SEC, fg=TXT, font=('Segoe UI', 9, 'bold'), relief='flat', cursor='hand2', highlightbackground=BORDER, highlightthickness=1)
         btn_export.pack(side='right', fill='x', expand=True, padx=(5, 0), ipady=6)
         
         self.wifi_results = []
@@ -1260,7 +1338,7 @@ class App:
             # Không gọi root.update() ở đây: re-entrancy giữa callback chuột có thể
             # dispatch tiếp event đang xếp hàng (double-click chạy 2 lần)
 
-            self.lbl_wifi_confirm.config(text="✅ Đã sao chép mật khẩu!", fg=ACCENT2)
+            self.lbl_wifi_confirm.config(text="✅ Đã sao chép mật khẩu!", fg='#16A34A')
             
             def clear_confirm():
                 try:
@@ -1366,7 +1444,7 @@ class App:
                 for idx, res in enumerate(results, 1):
                     self.wifi_tree.insert('', 'end', values=(idx, res['ssid'], res['password'], res['auth']))
                 
-                self.lbl_wifi_confirm.config(text=f"✅ Đã quét xong! Tìm thấy {len(results)} mạng WiFi.", fg=ACCENT2)
+                self.lbl_wifi_confirm.config(text=f"✅ Đã quét xong! Tìm thấy {len(results)} mạng WiFi.", fg='#16A34A')
                 
             self._post(update_ui)
             
@@ -1400,7 +1478,7 @@ class App:
                     f.write(f"{idx:<5} {res['ssid']:<30} {res['password']:<30} {res['auth']:<15}\n")
                 f.write("================================================================================\n")
             
-            self.lbl_wifi_confirm.config(text=f"✅ Đã xuất file thành công!", fg=ACCENT2)
+            self.lbl_wifi_confirm.config(text=f"✅ Đã xuất file thành công!", fg='#16A34A')
             
             def clear_confirm():
                 try:
@@ -2139,10 +2217,11 @@ Bấm OK để tiếp tục."""
         43: 'Lỗi sau khi khởi động',
     }
     def _build_act_tab(self):
-        self.tab_act_frame = tk.Frame(self.root, bg=BG)
+        self.tab_act_frame = tk.Frame(self.content, bg=BG)
+        body = self._scroll_area(self.tab_act_frame)
         # Chỉ còn 1 nội dung là Kích Hoạt → bỏ hẳn thanh sub-tab
         # (đã xóa Auto Click / Ẩn App / Gỡ App)
-        self.sub_frame_2 = tk.Frame(self.tab_act_frame, bg=BG)
+        self.sub_frame_2 = tk.Frame(body, bg=BG)
         self._build_sub_activate()
         self.sub_frame_2.pack(fill='both', expand=True)
 
@@ -2167,13 +2246,14 @@ Bấm OK để tiếp tục."""
         self.lbl_off_status.pack(side='left', padx=8)
         # Action cards
         def make_card(parent, label, btn_text, cmd, btn_color=ACCENT3, fg_color=BG):
-            card = tk.Frame(parent, bg=CARD, padx=8, pady=4)
+            card = tk.Frame(parent, bg=CARD, padx=8, pady=4,
+                            highlightbackground=BORDER, highlightthickness=1)
             card.pack(fill='x', padx=8, pady=2)
             tk.Label(card, text=label, bg=CARD, fg=MUTED,
                 font=('Segoe UI', 8)).pack(anchor='w')
             tk.Button(card, text=btn_text, command=cmd,
                 bg=btn_color, fg=fg_color,
-                font=('Segoe UI', 9, 'bold'),
+                font=('Segoe UI', 10, 'bold'),
                 relief='flat', cursor='hand2').pack(
                 fill='x', ipady=5, pady=2)
         make_card(p, 'Kích hoạt bản quyền vĩnh viễn qua HWID',
@@ -2181,34 +2261,36 @@ Bấm OK để tiếp tục."""
             self._activate_windows, ACCENT, 'white')
         make_card(p, 'Kích hoạt Office 365/2019/2021/2024 qua Ohook',
             '  KÍCH HOẠT OFFICE   🚀',
-            self._activate_office, ACCENT4, BG)
+            self._activate_office, ACCENT, 'white')
         make_card(p, 'Kích hoạt đồng thời Windows + Office',
             '  KÍCH HOẠT CẢ HAI  🚀',
-            self._activate_both, ACCENT2, BG)
+            self._activate_both, ACCENT, 'white')
         # Office download — 1 nút mỗi bản, sinh từ OFFICE_SOURCES
-        dl_card = tk.Frame(p, bg=CARD, padx=8, pady=4)
+        dl_card = tk.Frame(p, bg=CARD, padx=8, pady=4,
+                           highlightbackground=BORDER, highlightthickness=1)
         dl_card.pack(fill='x', padx=8, pady=2)
         for _key, _src in self.OFFICE_SOURCES.items():
             tk.Label(dl_card, text=_src['desc'], bg=CARD, fg=MUTED,
                 font=('Segoe UI', 8)).pack(anchor='w')
             _btn = tk.Button(dl_card, text=_src['label'],
                 command=lambda k=_key: self._download_office(k),
-                bg=INPUT, fg=MUTED,
-                font=('Segoe UI', 9, 'bold'),
-                relief='flat', cursor='hand2')
+                bg=SEC, fg=TXT,
+                font=('Segoe UI', 10, 'bold'),
+                relief='flat', cursor='hand2',
+                highlightbackground=BORDER, highlightthickness=1)
             _btn.pack(fill='x', ipady=4, pady=(0, 4))
-            # Nút ProPlus giữ vai trò cũ: _activate_office chỉnh màu nó khi chưa cài
-            if _key == 'proplus':
+            # Nút đầu tiên giữ vai trò cũ: _activate_office chỉnh màu nó khi chưa cài
+            if not hasattr(self, 'btn_dl_office'):
                 self.btn_dl_office = _btn
         # Progress
-        self.act_canvas = tk.Canvas(p, bg='#1a2638', height=6,
+        self.act_canvas = tk.Canvas(p, bg='#DBEAFE', height=6,
             highlightthickness=0)
         self.act_canvas.pack(fill='x', padx=8, pady=2)
         self.lbl_act_pct = tk.Label(p, text='',
             bg=BG, fg=MUTED, font=('Segoe UI', 8))
         self.lbl_act_pct.pack(anchor='e', padx=10)
         # Log
-        self.act_log = st.ScrolledText(p, bg='#0f1522', fg=MUTED,
+        self.act_log = st.ScrolledText(p, bg='#FFFFFF', fg=MUTED,
             font=('Courier New', 8), relief='flat',
             wrap='word', height=3)
         self.act_log.pack(fill='x', padx=8, pady=(0, 6))
@@ -2327,7 +2409,7 @@ Bấm OK để tiếp tục."""
             messagebox.showwarning('Chưa cài Office',
                 'Vui lòng cài Office trước!\nNhấn một trong các nút "TẢI OFFICE" bên dưới.',
                 parent=self.root)
-            self.btn_dl_office.config(bg=ACCENT4, fg=BG)
+            self.btn_dl_office.config(bg=ACCENT4, fg=TXT)
             return
         self._log_activ('🚀 Kích hoạt Office (Ohook)...', 'cyber')
         threading.Thread(
@@ -2342,9 +2424,9 @@ Bấm OK để tiếp tục."""
         threading.Thread(
             target=self._run_mas,
             args=('/HWID /Ohook',), daemon=True).start()
-    def _download_office(self, kind='proplus'):
+    def _download_office(self, kind='hs2024'):
         """Tải bộ cài Office về Desktop — nguồn lấy từ OFFICE_SOURCES."""
-        src = self.OFFICE_SOURCES.get(kind) or self.OFFICE_SOURCES['proplus']
+        src = self.OFFICE_SOURCES.get(kind) or self.OFFICE_SOURCES['hs2024']
         url = src['url']
         dest = os.path.join(os.path.expanduser('~'), 'Desktop', src['file'])
         # File đã tải rồi: hỏi mở hay tải lại, tránh tải nhầm lại vài GB
@@ -2433,19 +2515,8 @@ Bấm OK để tiếp tục."""
         f_inner.pack(side='right', padx=8)
         lbl_by = tk.Label(f_inner, text='Build by ', bg=PANEL, fg=MUTED, font=('Segoe UI', 8, 'italic'))
         lbl_by.pack(side='left')
-        self.lbl_vk = tk.Label(f_inner, text='Vũ Khuê', bg=PANEL, fg=ACCENT2, font=('Segoe UI', 10, 'bold'))
+        self.lbl_vk = tk.Label(f_inner, text='Vũ Khuê', bg=PANEL, fg='#1D4ED8', font=('Segoe UI', 10, 'bold'))
         self.lbl_vk.pack(side='left')
-        self.vk_colors = ['#f87171', '#34d399', '#fbbf24', '#22d3ee', '#f472b6', '#c084fc', '#a78bfa']
-        self.vk_color_idx = 0
-        self._blink_vk()
-    def _blink_vk(self):
-        try:
-            self.vk_color_idx = (self.vk_color_idx + 1) % len(self.vk_colors)
-            color = self.vk_colors[self.vk_color_idx]
-            self.lbl_vk.config(fg=color)
-        except Exception:
-            pass
-        self.root.after(180, self._blink_vk)
 # ── Tab Tải App: nguồn cài chính thức của 16 phần mềm (đã probe HEAD 200) ──
 # kind='direct' → url cố định của hãng
 # kind='github' → lấy file mới nhất từ GitHub API (repo hãng tự phát hành)
@@ -2948,8 +3019,15 @@ def build_quality_options(info):
         if score > cur_score or (score == cur_score
                                  and (f.get('tbr') or 0) > (cur_f.get('tbr') or 0)):
             best_by_height[height] = (f, score)
-    options = [{'format_id': f['format_id'], 'label': f'{h}p', 'height': h}
-               for h, (f, _) in best_by_height.items()]
+    # MỌI chiều cao đều mời, nhưng chiều cao không có H.264 (YouTube 4K/2K
+    # chỉ có VP9/AV01) phải gắn nhãn "(cần VLC)" — WMP phát file VP9 chỉ ra
+    # tiếng, người dùng cần biết trước khi chọn.
+    options = []
+    for h, (f, _) in best_by_height.items():
+        avc = (f.get('vcodec') or '').lower().startswith('avc')
+        options.append({'format_id': f['format_id'],
+                        'label': f'{h}p' if avc else f'{h}p (cần VLC)',
+                        'height': h})
     options.sort(key=lambda x: x['height'], reverse=True)
     return options
 
